@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsup && pnpm link --global"
   },
   "dependencies": {
     "commander": "^13",
@@ -21,7 +22,7 @@
     "tsx": "^4",
     "@types/node": "^22"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.29.3",
   "engines": {
     "node": ">=18"
   },

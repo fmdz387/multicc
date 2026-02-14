@@ -3,7 +3,7 @@ import path from "node:path";
 import type { AuthType } from "../types.js";
 import { loadConfig, saveConfig, resolveProfileName } from "../config.js";
 import { getProfileDir, getClaudeDefaultDir } from "../paths.js";
-import { success, error, info, profileTable } from "../display.js";
+import { success, error, info, detail, profileTable } from "../display.js";
 
 const VALID_AUTH_TYPES = new Set<string>([
   "oauth",
@@ -121,7 +121,7 @@ export async function handleCreate(
   }
 
   if (authType === "oauth") {
-    info(`Run "multicc login ${name}" to authenticate.`);
+    info(`Run "multicc launch ${name}" to start Claude Code and sign in.`);
   } else if (authType === "api-key") {
     info(`Run "multicc set-key ${name}" to store your API key.`);
   }
@@ -303,6 +303,6 @@ export async function handleImport(
   saveConfig(config);
 
   success(`Profile "${profileName}" imported from ${sourceDir}`);
-  info(`Copied files: ${copiedFiles.join(", ")}`);
-  info(`Config directory: ${profileDir}`);
+  detail(`Copied: ${copiedFiles.join(", ")}`);
+  detail(`Config: ${profileDir}`);
 }

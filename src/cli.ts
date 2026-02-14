@@ -1,41 +1,147 @@
 import { Command } from "commander";
 import { loadConfig } from "./config.js";
-import { info } from "./display.js";
+import { info, getBanner, getVersion } from "./display.js";
 
 export function createProgram(): Command {
   const program = new Command();
+  program.enablePositionalOptions();
 
   program
     .name("multicc")
     .description("Manage multiple Claude Code accounts")
-    .version("0.1.0")
-    .action(() => {
+    .version(getVersion())
+    .addHelpText("before", getBanner() + "\n")
+    .action(async () => {
       const config = loadConfig();
+      const hasProfiles = Object.keys(config.profiles).length > 0;
+
+      if (!hasProfiles) {
+        const { runOnboarding } = await import("./commands/onboarding.js");
+        await runOnboarding();
+        return;
+      }
+
       const active = config.activeProfile;
       const profile = config.profiles[active];
       if (profile) {
         info(`Active profile: ${active} (${profile.authType})`);
       } else {
-        info('No profiles configured. Run "multicc profile create <name>" to get started.');
+        info(
+          'No profiles configured. Run "multicc create <name>" to get started.'
+        );
       }
     });
 
-  // === Command Registration ===
+  // === Quick Commands (most common operations at top level) ===
 
-  const profile = program.command("profile").description("Manage profiles");
+  program
+    .command("create <name>")
+    .description("Create a new profile")
+    .option(
+      "--auth-type <type>",
+      "Auth type (oauth, api-key, bedrock, vertex, foundry)"
+    )
+    .option("--description <desc>", "Profile description")
+    .action(
+      async (name: string, opts: { authType?: string; description?: string }) => {
+        const mod = await import("./commands/profile.js");
+        await mod.handleCreate(name, opts);
+      }
+    );
+
+  program
+    .command("use <name>")
+    .alias("switch")
+    .description("Switch active profile")
+    .action(async (name: string) => {
+      const mod = await import("./commands/profile.js");
+      await mod.handleSwitch(name);
+    });
+
+  program
+    .command("list")
+    .alias("ls")
+    .description("List all profiles")
+    .action(async () => {
+      const mod = await import("./commands/profile.js");
+      await mod.handleList();
+    });
+
+  // === Session Commands ===
+
+  program
+    .command("launch [name]")
+    .description("Launch Claude Code with a profile")
+    .passThroughOptions()
+    .allowUnknownOption()
+    .allowExcessArguments()
+    .addHelpText(
+      "after",
+      `
+All flags after the profile name are forwarded to Claude Code.
+
+Examples:
+  $ multicc launch work
+  $ multicc launch work --model sonnet
+  $ multicc launch work --dangerously-skip-permissions
+  $ multicc launch work -p "explain this code"
+  $ multicc launch -- --model sonnet      (use -- when omitting profile name)
+`
+    )
+    .action(
+      async (
+        name: string | undefined,
+        _opts: Record<string, never>,
+        cmd: Command
+      ) => {
+        const mod = await import("./commands/launch.js");
+        await mod.handleLaunch(name, cmd.args);
+      }
+    );
+
+  program
+    .command("set-key [name]")
+    .description("Store an API key for a profile")
+    .option("--from-env <var>", "Read key from environment variable")
+    .action(async (name?: string, opts?: { fromEnv?: string }) => {
+      const mod = await import("./commands/set-key.js");
+      await mod.handleSetKey(name, opts ?? {});
+    });
+
+  program
+    .command("status")
+    .description("Show status of all profiles")
+    .action(async () => {
+      const mod = await import("./commands/status.js");
+      await mod.handleStatus();
+    });
+
+  // === Profile Management (organized group with all operations) ===
+
+  const profile = program
+    .command("profile")
+    .alias("p")
+    .description("All profile commands (show, delete, import, ...)");
 
   profile
     .command("create <name>")
+    .alias("new")
     .description("Create a new profile")
-    .option("--auth-type <type>", "Auth type (oauth, api-key, bedrock, vertex, foundry)")
+    .option(
+      "--auth-type <type>",
+      "Auth type (oauth, api-key, bedrock, vertex, foundry)"
+    )
     .option("--description <desc>", "Profile description")
-    .action(async (name: string, opts: { authType?: string; description?: string }) => {
-      const mod = await import("./commands/profile.js");
-      await mod.handleCreate(name, opts);
-    });
+    .action(
+      async (name: string, opts: { authType?: string; description?: string }) => {
+        const mod = await import("./commands/profile.js");
+        await mod.handleCreate(name, opts);
+      }
+    );
 
   profile
     .command("list")
+    .alias("ls")
     .description("List all profiles")
     .action(async () => {
       const mod = await import("./commands/profile.js");
@@ -44,6 +150,7 @@ export function createProgram(): Command {
 
   profile
     .command("show [name]")
+    .alias("info")
     .description("Show profile details")
     .action(async (name?: string) => {
       const mod = await import("./commands/profile.js");
@@ -52,6 +159,7 @@ export function createProgram(): Command {
 
   profile
     .command("switch <name>")
+    .alias("use")
     .description("Switch active profile")
     .action(async (name: string) => {
       const mod = await import("./commands/profile.js");
@@ -60,6 +168,7 @@ export function createProgram(): Command {
 
   profile
     .command("delete <name>")
+    .alias("rm")
     .description("Delete a profile")
     .action(async (name: string) => {
       const mod = await import("./commands/profile.js");
@@ -77,29 +186,35 @@ export function createProgram(): Command {
       await mod.handleImport(opts);
     });
 
-  program
-    .command("launch [name]")
-    .description("Launch claude with a profile")
-    .allowUnknownOption(true)
-    .allowExcessArguments(true)
-    .action(async (name?: string) => {
-      const mod = await import("./commands/launch.js");
-      const dashIdx = process.argv.indexOf("--");
-      const passthrough = dashIdx !== -1 ? process.argv.slice(dashIdx + 1) : [];
-      await mod.handleLaunch(name, passthrough);
-    });
+  // === Advanced Commands ===
 
   program
     .command("exec [name]")
     .description("Run a command with profile environment")
-    .allowUnknownOption(true)
-    .allowExcessArguments(true)
-    .action(async (name?: string) => {
-      const mod = await import("./commands/exec.js");
-      const dashIdx = process.argv.indexOf("--");
-      const passthrough = dashIdx !== -1 ? process.argv.slice(dashIdx + 1) : [];
-      await mod.handleExec(name, passthrough);
-    });
+    .passThroughOptions()
+    .allowUnknownOption()
+    .allowExcessArguments()
+    .addHelpText(
+      "after",
+      `
+All arguments after the profile name are treated as the command to run.
+
+Examples:
+  $ multicc exec work node app.js --port 3000
+  $ multicc exec work npm test
+  $ multicc exec -- npm test                  (use -- when omitting profile name)
+`
+    )
+    .action(
+      async (
+        name: string | undefined,
+        _opts: Record<string, never>,
+        cmd: Command
+      ) => {
+        const mod = await import("./commands/exec.js");
+        await mod.handleExec(name, cmd.args);
+      }
+    );
 
   program
     .command("shell [name]")
@@ -119,6 +234,15 @@ export function createProgram(): Command {
     });
 
   program
+    .command("prune")
+    .description("Remove all multicc data, profiles, and credentials")
+    .option("--force", "Skip confirmation prompt")
+    .action(async (opts: { force?: boolean }) => {
+      const mod = await import("./commands/prune.js");
+      await mod.handlePrune(opts);
+    });
+
+  program
     .command("_resolve-config-dir")
     .description("Resolve the config directory for the active profile (internal)")
     .action(async () => {
@@ -126,30 +250,31 @@ export function createProgram(): Command {
       await mod.handleResolveConfigDir();
     });
 
-  program
-    .command("status")
-    .description("Show status of all profiles")
-    .action(async () => {
-      const mod = await import("./commands/status.js");
-      await mod.handleStatus();
-    });
+  // Hide internal command from help output
+  const resolveCmd = program.commands.find(
+    (c) => c.name() === "_resolve-config-dir"
+  );
+  if (resolveCmd) {
+    (resolveCmd as unknown as { _hidden: boolean })._hidden = true;
+  }
 
-  program
-    .command("login [name]")
-    .description("Log in to Claude with a profile")
-    .action(async (name?: string) => {
-      const mod = await import("./commands/login.js");
-      await mod.handleLogin(name);
-    });
+  // Add examples and tips after help
+  program.addHelpText(
+    "after",
+    `
+Examples:
+  $ multicc create work --auth-type oauth
+  $ multicc launch work --model sonnet
+  $ multicc launch work -p "explain this code"
+  $ multicc use personal
+  $ multicc list
+  $ eval "$(multicc shell-init)"
 
-  program
-    .command("set-key [name]")
-    .description("Store an API key for a profile")
-    .option("--from-env <var>", "Read key from environment variable")
-    .action(async (name?: string, opts?: { fromEnv?: string }) => {
-      const mod = await import("./commands/set-key.js");
-      await mod.handleSetKey(name, opts ?? {});
-    });
+Tip: Flags after the profile name pass through to Claude Code.
+     "create", "use|switch", and "list|ls" are top-level shortcuts.
+     Run "multicc profile --help" for all profile management commands.
+`
+  );
 
   return program;
 }

@@ -1,6 +1,6 @@
 import { loadConfig } from "../config.js";
 import { getCredentialStatus } from "../auth.js";
-import { info } from "../display.js";
+import { info, stripAnsi } from "../display.js";
 import pc from "picocolors";
 
 function formatExpiry(expiresAt: number): string {
@@ -55,7 +55,7 @@ export async function handleStatus(): Promise<void> {
     const profile = config.profiles[name];
     const isActive = name === config.activeProfile;
 
-    let status: ReturnType<typeof formatAuthStatus>;
+    let status: string;
     let expiry = "";
 
     try {
@@ -81,10 +81,13 @@ export async function handleStatus(): Promise<void> {
     Math.max(h.length, ...rows.map((r) => stripAnsi(r[i]).length))
   );
 
+  const sep = "  ";
   const headerRow = headers
-    .map((h, i) => h.padEnd(colWidths[i]))
-    .join(" | ");
-  const separator = colWidths.map((w) => "-".repeat(w)).join(" | ");
+    .map((h, i) => pc.bold(h.padEnd(colWidths[i])))
+    .join(sep);
+  const separator = pc.dim(
+    colWidths.map((w) => "\u2500".repeat(w)).join(sep)
+  );
   const dataRows = rows.map((row) =>
     row
       .map((cell, i) => {
@@ -92,12 +95,10 @@ export async function handleStatus(): Promise<void> {
         const pad = colWidths[i] - visible;
         return cell + " ".repeat(Math.max(0, pad));
       })
-      .join(" | ")
+      .join(sep)
   );
 
-  process.stdout.write([headerRow, separator, ...dataRows].join("\n") + "\n");
-}
-
-function stripAnsi(str: string): string {
-  return str.replace(/\u001b\[[0-9;]*m/g, "");
+  process.stdout.write(
+    ["  " + headerRow, "  " + separator, ...dataRows.map((r) => "  " + r)].join("\n") + "\n"
+  );
 }

@@ -1,27 +1,42 @@
 import { spawn } from "node:child_process";
-import { loadConfig, resolveProfileName } from "../config.js";
+import { loadConfig } from "../config.js";
 import { buildProfileEnv } from "../auth.js";
 import { error, info } from "../display.js";
 
 export async function handleLaunch(
-  name?: string,
-  passthrough?: string[]
+  name: string | undefined,
+  rawArgs: string[]
 ): Promise<void> {
   const config = loadConfig();
-  let profileName = resolveProfileName(config, name);
-  const args = passthrough ? [...passthrough] : [];
+  let profileName: string;
+  let passthrough: string[];
 
-  // If the resolved name isn't a valid profile, it was likely captured from
-  // args after `--` by Commander. It's already in args via process.argv
-  // slicing, so just fall back to active profile.
-  if (name && !config.profiles[profileName]) {
-    profileName = resolveProfileName(config);
+  if (name && config.profiles[name]) {
+    // Valid profile name — everything after it is for claude
+    profileName = name;
+    passthrough = rawArgs.slice(1);
+  } else if (name) {
+    // Commander consumed something as name but it's not a valid profile.
+    // Treat everything (including the consumed "name") as passthrough.
+    profileName = config.activeProfile;
+    passthrough = rawArgs;
+  } else {
+    // No name provided — active profile, everything is passthrough
+    profileName = config.activeProfile;
+    passthrough = rawArgs;
+  }
+
+  // Strip leading -- separator (user explicitly separated args)
+  if (passthrough.length > 0 && passthrough[0] === "--") {
+    passthrough = passthrough.slice(1);
   }
 
   const profile = config.profiles[profileName];
 
   if (!profile) {
-    error(`Profile "${profileName}" not found. Run "multicc profile list" to see available profiles.`);
+    error(
+      `Profile "${profileName}" not found. Run "multicc list" to see available profiles.`
+    );
     process.exit(1);
   }
 
@@ -29,7 +44,7 @@ export async function handleLaunch(
 
   info(`Launching claude with profile: ${profileName}`);
 
-  const child = spawn("claude", args, {
+  const child = spawn("claude", passthrough, {
     stdio: "inherit",
     env: { ...process.env, ...profileEnv },
     shell: true,

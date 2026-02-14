@@ -21,6 +21,9 @@
     "tsx": "^4",
     "@types/node": "^22"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "optionalDependencies": {
     "@napi-rs/keyring": "^1",
     "@inquirer/prompts": "^7"

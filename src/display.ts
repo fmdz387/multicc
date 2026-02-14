@@ -142,7 +142,7 @@ export function redact(value: string): string {
 
 // ── Version & Branding ─────────────────────────────
 
-const VERSION = "1.0.3";
+const VERSION = "1.0.4";
 
 export function getVersion(): string {
   return VERSION;

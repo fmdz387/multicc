@@ -78,7 +78,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "24"
           cache: "pnpm"
           registry-url: https://registry.npmjs.org/
 
@@ -86,7 +86,7 @@ jobs:
       - run: pnpm build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: npm publish --access public
 
   github-release:
     name: Create GitHub Release

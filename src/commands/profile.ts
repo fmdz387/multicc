@@ -99,6 +99,20 @@ export async function handleCreate(
   const profileDir = getProfileDir(name);
   fs.mkdirSync(profileDir, { recursive: true });
 
+  // Copy auth credentials from default Claude config if available
+  let copiedAuth = false;
+  if (authType === "oauth") {
+    const defaultCredPath = path.join(getClaudeDefaultDir(), ".credentials.json");
+    if (fs.existsSync(defaultCredPath)) {
+      const destPath = path.join(profileDir, ".credentials.json");
+      fs.copyFileSync(defaultCredPath, destPath);
+      if (process.platform !== "win32") {
+        fs.chmodSync(destPath, 0o600);
+      }
+      copiedAuth = true;
+    }
+  }
+
   config.profiles[name] = {
     authType,
     configDir: profileDir,
@@ -120,7 +134,9 @@ export async function handleCreate(
     info(`Set as active profile.`);
   }
 
-  if (authType === "oauth") {
+  if (copiedAuth) {
+    info(`Copied existing credentials from default Claude config.`);
+  } else if (authType === "oauth") {
     info(`Run "multicc launch ${name}" to start Claude Code and sign in.`);
   } else if (authType === "api-key") {
     info(`Run "multicc set-key ${name}" to store your API key.`);

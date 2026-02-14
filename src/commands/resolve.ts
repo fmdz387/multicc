@@ -1,5 +1,21 @@
-// Stub - implemented by profile-shell-engineer
+import { loadConfig } from "../config.js";
 
 export async function handleResolveConfigDir(): Promise<void> {
-  throw new Error("Not implemented");
+  const profileName = process.env["MULTICC_PROFILE"];
+
+  let config;
+  try {
+    config = loadConfig();
+  } catch {
+    process.exit(1);
+  }
+
+  const resolved = profileName ?? config.activeProfile;
+  const profile = config.profiles[resolved];
+
+  if (!profile) {
+    process.exit(1);
+  }
+
+  process.stdout.write(profile.configDir);
 }

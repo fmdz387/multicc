@@ -1,3 +1,40 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# TypeScript
 *.tsbuildinfo
+tsup.config.bundled_*.mjs
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / Editor
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Environment / Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code / AI artifacts
+.claude/
+MULTICC_RESEARCH.md
+EXECUTION_PLAN.md
+EXECUTION_PROMPT.txt

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import type { AuthType } from "../types.js";
-import { loadConfig, saveConfig } from "../config.js";
+import { loadConfig, saveConfig, resolveProfileName } from "../config.js";
 import { getProfileDir } from "../paths.js";
-import { success, error, info } from "../display.js";
+import { success, error, info, profileTable } from "../display.js";
 
 const VALID_AUTH_TYPES = new Set<string>([
   "oauth",
@@ -127,19 +127,103 @@ export async function handleCreate(
 }
 
 export async function handleList(): Promise<void> {
-  throw new Error("Not implemented");
+  const config = loadConfig();
+  const names = Object.keys(config.profiles);
+
+  if (names.length === 0) {
+    info(
+      'No profiles configured. Run "multicc profile create <name>" to get started.'
+    );
+    return;
+  }
+
+  const rows = names.map((name) => {
+    const profile = config.profiles[name];
+    return {
+      name,
+      active: name === config.activeProfile,
+      authType: profile.authType,
+      description: profile.description,
+    };
+  });
+
+  const table = profileTable(rows);
+  process.stdout.write(table + "\n");
 }
 
-export async function handleShow(_name?: string): Promise<void> {
-  throw new Error("Not implemented");
+export async function handleShow(name?: string): Promise<void> {
+  const config = loadConfig();
+  const resolved = resolveProfileName(config, name);
+  const profile = config.profiles[resolved];
+
+  if (!profile) {
+    error(`Profile "${resolved}" not found.`);
+    process.exit(1);
+  }
+
+  const isActive = resolved === config.activeProfile;
+
+  process.stdout.write(`Name:        ${resolved}${isActive ? " (active)" : ""}\n`);
+  process.stdout.write(`Auth Type:   ${profile.authType}\n`);
+  process.stdout.write(`Config Dir:  ${profile.configDir}\n`);
+  if (profile.description) {
+    process.stdout.write(`Description: ${profile.description}\n`);
+  }
+  process.stdout.write(`Created:     ${profile.createdAt}\n`);
+  if (profile.envOverrides && Object.keys(profile.envOverrides).length > 0) {
+    process.stdout.write(`Env Overrides:\n`);
+    for (const [key, value] of Object.entries(profile.envOverrides)) {
+      process.stdout.write(`  ${key}=${value}\n`);
+    }
+  }
 }
 
-export async function handleSwitch(_name: string): Promise<void> {
-  throw new Error("Not implemented");
+export async function handleSwitch(name: string): Promise<void> {
+  const config = loadConfig();
+
+  if (!config.profiles[name]) {
+    error(`Profile "${name}" not found.`);
+    process.exit(1);
+  }
+
+  config.activeProfile = name;
+  saveConfig(config);
+  success(`Switched to profile "${name}".`);
 }
 
-export async function handleDelete(_name: string): Promise<void> {
-  throw new Error("Not implemented");
+export async function handleDelete(name: string): Promise<void> {
+  const config = loadConfig();
+
+  if (!config.profiles[name]) {
+    error(`Profile "${name}" not found.`);
+    process.exit(1);
+  }
+
+  const profileCount = Object.keys(config.profiles).length;
+  if (profileCount <= 1) {
+    error("Cannot delete the only remaining profile.");
+    process.exit(1);
+  }
+
+  const profileDir = config.profiles[name].configDir;
+
+  delete config.profiles[name];
+
+  if (config.activeProfile === name) {
+    const remaining = Object.keys(config.profiles);
+    config.activeProfile = remaining[0];
+    info(`Active profile switched to "${remaining[0]}".`);
+  }
+
+  saveConfig(config);
+
+  try {
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  } catch {
+    // Directory may not exist or be inaccessible -- config is already updated
+  }
+
+  success(`Profile "${name}" deleted.`);
 }
 
 export async function handleImport(

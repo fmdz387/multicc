@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { AuthType } from "../types.js";
 import { loadConfig, saveConfig, resolveProfileName } from "../config.js";
-import { getProfileDir } from "../paths.js";
+import { getProfileDir, getClaudeDefaultDir } from "../paths.js";
 import { success, error, info, profileTable } from "../display.js";
 
 const VALID_AUTH_TYPES = new Set<string>([
@@ -226,8 +227,82 @@ export async function handleDelete(name: string): Promise<void> {
   success(`Profile "${name}" deleted.`);
 }
 
+const IMPORTABLE_FILES = [".credentials.json", "settings.json", "CLAUDE.md"];
+
 export async function handleImport(
-  _opts: { name: string; from?: string; force?: boolean }
+  opts: { name: string; from?: string; force?: boolean }
 ): Promise<void> {
-  throw new Error("Not implemented");
+  const sourceDir = opts.from ?? getClaudeDefaultDir();
+  const profileName = opts.name;
+
+  const nameError = validateProfileName(profileName);
+  if (nameError) {
+    error(nameError);
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(sourceDir)) {
+    error(`Source directory does not exist: ${sourceDir}`);
+    process.exit(1);
+  }
+
+  const hasImportableFiles = IMPORTABLE_FILES.some((file) =>
+    fs.existsSync(path.join(sourceDir, file))
+  );
+
+  if (!hasImportableFiles) {
+    error(
+      `Source directory does not contain any importable files (.credentials.json, settings.json, or CLAUDE.md): ${sourceDir}`
+    );
+    process.exit(1);
+  }
+
+  const config = loadConfig();
+
+  if (config.profiles[profileName] && !opts.force) {
+    error(
+      `Profile "${profileName}" already exists. Use --force to overwrite.`
+    );
+    process.exit(1);
+  }
+
+  const profileDir = getProfileDir(profileName);
+  fs.mkdirSync(profileDir, { recursive: true });
+
+  let authType: AuthType = "oauth";
+  if (fs.existsSync(path.join(sourceDir, ".credentials.json"))) {
+    authType = "oauth";
+  }
+
+  const copiedFiles: string[] = [];
+  for (const file of IMPORTABLE_FILES) {
+    const srcPath = path.join(sourceDir, file);
+    if (fs.existsSync(srcPath)) {
+      const destPath = path.join(profileDir, file);
+      fs.copyFileSync(srcPath, destPath);
+      if (process.platform !== "win32" && file === ".credentials.json") {
+        fs.chmodSync(destPath, 0o600);
+      }
+      copiedFiles.push(file);
+    }
+  }
+
+  const hadNoProfiles = Object.keys(config.profiles).length === 0;
+
+  config.profiles[profileName] = {
+    authType,
+    configDir: profileDir,
+    description: `Imported from ${sourceDir}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (hadNoProfiles) {
+    config.activeProfile = profileName;
+  }
+
+  saveConfig(config);
+
+  success(`Profile "${profileName}" imported from ${sourceDir}`);
+  info(`Copied files: ${copiedFiles.join(", ")}`);
+  info(`Config directory: ${profileDir}`);
 }

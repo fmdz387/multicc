@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { AuthType } from "../types.js";
 import { loadConfig, saveConfig, resolveProfileName } from "../config.js";
@@ -227,7 +228,33 @@ export async function handleDelete(name: string): Promise<void> {
   success(`Profile "${name}" deleted.`);
 }
 
-const IMPORTABLE_FILES = [".credentials.json", "settings.json", "CLAUDE.md"];
+// Ephemeral / generated data to skip during import — everything else is copied.
+const IMPORT_SKIP = new Set([
+  "cache",
+  "debug",
+  "telemetry",
+  "statsig",
+  "usage-data",
+  "shell-snapshots",
+  "paste-cache",
+  "file-history",
+  "chrome",
+  "downloads",
+  "projects",
+  "tasks",
+  "teams",
+  "todos",
+  "plans",
+  "history.jsonl",
+  ".update.lock",
+  "stats-cache.json",
+]);
+
+function shouldCopyEntry(name: string): boolean {
+  if (IMPORT_SKIP.has(name)) return false;
+  if (name.includes(".backup.")) return false;
+  return true;
+}
 
 export async function handleImport(
   opts: { name: string; from?: string; force?: boolean }
@@ -246,14 +273,11 @@ export async function handleImport(
     process.exit(1);
   }
 
-  const hasImportableFiles = IMPORTABLE_FILES.some((file) =>
-    fs.existsSync(path.join(sourceDir, file))
-  );
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+  const copyable = entries.filter((e) => shouldCopyEntry(e.name));
 
-  if (!hasImportableFiles) {
-    error(
-      `Source directory does not contain any importable files (.credentials.json, settings.json, or CLAUDE.md): ${sourceDir}`
-    );
+  if (copyable.length === 0) {
+    error(`Source directory does not contain any importable files: ${sourceDir}`);
     process.exit(1);
   }
 
@@ -267,6 +291,9 @@ export async function handleImport(
   }
 
   const profileDir = getProfileDir(profileName);
+  if (opts.force && fs.existsSync(profileDir)) {
+    fs.rmSync(profileDir, { recursive: true, force: true });
+  }
   fs.mkdirSync(profileDir, { recursive: true });
 
   let authType: AuthType = "oauth";
@@ -274,16 +301,41 @@ export async function handleImport(
     authType = "oauth";
   }
 
-  const copiedFiles: string[] = [];
-  for (const file of IMPORTABLE_FILES) {
-    const srcPath = path.join(sourceDir, file);
-    if (fs.existsSync(srcPath)) {
-      const destPath = path.join(profileDir, file);
+  // Copy all config files and directories from source
+  const copiedItems: string[] = [];
+  for (const entry of copyable) {
+    const srcPath = path.join(sourceDir, entry.name);
+    const destPath = path.join(profileDir, entry.name);
+
+    if (entry.isDirectory()) {
+      fs.cpSync(srcPath, destPath, { recursive: true, force: true });
+      copiedItems.push(entry.name + "/");
+    } else {
       fs.copyFileSync(srcPath, destPath);
-      if (process.platform !== "win32" && file === ".credentials.json") {
+      if (process.platform !== "win32" && entry.name === ".credentials.json") {
         fs.chmodSync(destPath, 0o600);
       }
-      copiedFiles.push(file);
+      copiedItems.push(entry.name);
+    }
+  }
+
+  // Claude Code stores OAuth session + MCP servers + per-project settings
+  // in .claude.json. When CLAUDE_CONFIG_DIR is set it reads from
+  // $CLAUDE_CONFIG_DIR/.claude.json. The default location is ~/.claude.json
+  // (home root, NOT inside ~/.claude/). Custom CLAUDE_CONFIG_DIR installs
+  // store it inside the config dir itself.
+  if (!copiedItems.includes(".claude.json")) {
+    const claudeJsonInSource = path.join(sourceDir, ".claude.json");
+    const claudeJsonInHome = path.join(os.homedir(), ".claude.json");
+    const claudeJsonSrc = fs.existsSync(claudeJsonInSource)
+      ? claudeJsonInSource
+      : fs.existsSync(claudeJsonInHome)
+        ? claudeJsonInHome
+        : null;
+
+    if (claudeJsonSrc) {
+      fs.copyFileSync(claudeJsonSrc, path.join(profileDir, ".claude.json"));
+      copiedItems.push(".claude.json");
     }
   }
 
@@ -303,6 +355,6 @@ export async function handleImport(
   saveConfig(config);
 
   success(`Profile "${profileName}" imported from ${sourceDir}`);
-  detail(`Copied: ${copiedFiles.join(", ")}`);
+  detail(`Copied: ${copiedItems.join(", ")}`);
   detail(`Config: ${profileDir}`);
 }

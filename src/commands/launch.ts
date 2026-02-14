@@ -8,7 +8,16 @@ export async function handleLaunch(
   passthrough?: string[]
 ): Promise<void> {
   const config = loadConfig();
-  const profileName = resolveProfileName(config, name);
+  let profileName = resolveProfileName(config, name);
+  const args = passthrough ? [...passthrough] : [];
+
+  // If the resolved name isn't a valid profile, it was likely captured from
+  // args after `--` by Commander. It's already in args via process.argv
+  // slicing, so just fall back to active profile.
+  if (name && !config.profiles[profileName]) {
+    profileName = resolveProfileName(config);
+  }
+
   const profile = config.profiles[profileName];
 
   if (!profile) {
@@ -17,7 +26,6 @@ export async function handleLaunch(
   }
 
   const profileEnv = await buildProfileEnv(profile, profileName);
-  const args = passthrough ?? [];
 
   info(`Launching claude with profile: ${profileName}`);
 

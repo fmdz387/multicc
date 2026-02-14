@@ -81,9 +81,11 @@ export function createProgram(): Command {
     .command("launch [name]")
     .description("Launch claude with a profile")
     .allowUnknownOption(true)
-    .action(async (name?: string, _opts?: Record<string, unknown>, cmd?: Command) => {
+    .allowExcessArguments(true)
+    .action(async (name?: string) => {
       const mod = await import("./commands/launch.js");
-      const passthrough = cmd?.args?.slice(name ? 1 : 0) ?? [];
+      const dashIdx = process.argv.indexOf("--");
+      const passthrough = dashIdx !== -1 ? process.argv.slice(dashIdx + 1) : [];
       await mod.handleLaunch(name, passthrough);
     });
 
@@ -91,9 +93,11 @@ export function createProgram(): Command {
     .command("exec [name]")
     .description("Run a command with profile environment")
     .allowUnknownOption(true)
-    .action(async (name?: string, _opts?: Record<string, unknown>, cmd?: Command) => {
+    .allowExcessArguments(true)
+    .action(async (name?: string) => {
       const mod = await import("./commands/exec.js");
-      const passthrough = cmd?.args?.slice(name ? 1 : 0) ?? [];
+      const dashIdx = process.argv.indexOf("--");
+      const passthrough = dashIdx !== -1 ? process.argv.slice(dashIdx + 1) : [];
       await mod.handleExec(name, passthrough);
     });
 

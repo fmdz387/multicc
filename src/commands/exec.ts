@@ -8,7 +8,16 @@ export async function handleExec(
   passthrough?: string[]
 ): Promise<void> {
   const config = loadConfig();
-  const profileName = resolveProfileName(config, name);
+  let profileName = resolveProfileName(config, name);
+  const cmdArgs = passthrough ? [...passthrough] : [];
+
+  // If the resolved name isn't a valid profile, it was likely captured from
+  // args after `--` by Commander. It's already in cmdArgs via process.argv
+  // slicing, so just fall back to active profile.
+  if (name && !config.profiles[profileName]) {
+    profileName = resolveProfileName(config);
+  }
+
   const profile = config.profiles[profileName];
 
   if (!profile) {
@@ -16,13 +25,13 @@ export async function handleExec(
     process.exit(1);
   }
 
-  if (!passthrough || passthrough.length === 0) {
+  if (cmdArgs.length === 0) {
     error("No command specified. Usage: multicc exec [name] -- <command...>");
     process.exit(1);
   }
 
   const profileEnv = await buildProfileEnv(profile, profileName);
-  const [cmd, ...args] = passthrough;
+  const [cmd, ...args] = cmdArgs;
 
   const child = spawn(cmd, args, {
     stdio: "inherit",

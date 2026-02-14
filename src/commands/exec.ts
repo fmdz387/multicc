@@ -58,7 +58,7 @@ export async function handleExec(
 
   const child = spawn(cmd, args, {
     stdio: "inherit",
-    env: { ...process.env, ...profileEnv },
+    env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
     shell: true,
   });
 

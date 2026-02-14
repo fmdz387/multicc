@@ -1,6 +1,6 @@
 {
   "name": "multicc",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "Fast, cross-platform multi-account manager for Claude Code",
   "main": "./dist/index.js",

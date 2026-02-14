@@ -146,13 +146,31 @@ export async function getCredentialStatus(
   }
 }
 
+// Env vars that select Claude Code's auth mode — must be sanitized to prevent
+// cross-profile contamination when the parent shell has leftovers from another profile.
+const CLAUDE_AUTH_ENV_VARS = [
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_FOUNDRY_BASE_URL",
+  "ANTHROPIC_FOUNDRY_RESOURCE",
+] as const;
+
 export async function buildProfileEnv(
   profile: Profile,
   profileName: string
-): Promise<Record<string, string>> {
-  const env: Record<string, string> = {
+): Promise<Record<string, string | undefined>> {
+  const env: Record<string, string | undefined> = {
     CLAUDE_CONFIG_DIR: profile.configDir,
   };
+
+  // Explicitly unset all auth-related env vars so parent-process values
+  // from a different profile don't leak into the child process.
+  for (const key of CLAUDE_AUTH_ENV_VARS) {
+    env[key] = undefined;
+  }
 
   switch (profile.authType) {
     case "api-key": {

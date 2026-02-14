@@ -46,7 +46,7 @@ export async function handleLaunch(
 
   const child = spawn("claude", passthrough, {
     stdio: "inherit",
-    env: { ...process.env, ...profileEnv },
+    env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
     shell: true,
   });
 

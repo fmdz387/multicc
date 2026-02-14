@@ -26,7 +26,7 @@ export async function handleShell(name?: string): Promise<void> {
 
   const child = spawn(shellCmd, [], {
     stdio: "inherit",
-    env: { ...process.env, ...profileEnv },
+    env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
   });
 
   child.on("error", (err) => {

@@ -1,0 +1,28 @@
+{
+  "name": "multicc",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Fast, cross-platform multi-account manager for Claude Code",
+  "bin": {
+    "multicc": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^13",
+    "picocolors": "^1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7",
+    "tsup": "^8",
+    "tsx": "^4",
+    "@types/node": "^22"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1",
+    "@inquirer/prompts": "^7"
+  }
+}

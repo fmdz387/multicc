@@ -44,7 +44,8 @@ export async function handleLaunch(
 
   info(`Launching claude with profile: ${profileName}`);
 
-  const child = spawn("claude", passthrough, {
+  const cmd = ["claude", ...passthrough].join(" ");
+  const child = spawn(cmd, {
     stdio: "inherit",
     env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
     shell: true,

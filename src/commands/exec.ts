@@ -54,9 +54,9 @@ export async function handleExec(
   }
 
   const profileEnv = await buildProfileEnv(profile, profileName);
-  const [cmd, ...args] = passthrough;
+  const cmd = passthrough.join(" ");
 
-  const child = spawn(cmd, args, {
+  const child = spawn(cmd, {
     stdio: "inherit",
     env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
     shell: true,

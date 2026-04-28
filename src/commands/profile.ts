@@ -30,6 +30,22 @@ function validateProfileName(name: string): string | null {
   return null;
 }
 
+// Case-insensitive collision check. Default macOS (APFS) and Windows (NTFS)
+// volumes treat "Work" and "work" as the same directory, so we reject
+// case-distinct duplicates everywhere for cross-platform portability.
+function findCaseConflict(
+  name: string,
+  profiles: Record<string, unknown>
+): string | null {
+  const lower = name.toLowerCase();
+  for (const existing of Object.keys(profiles)) {
+    if (existing.toLowerCase() === lower) {
+      return existing;
+    }
+  }
+  return null;
+}
+
 function isValidAuthType(value: string): value is AuthType {
   return VALID_AUTH_TYPES.has(value);
 }
@@ -79,6 +95,15 @@ export async function handleCreate(
 
   if (config.profiles[name]) {
     error(`Profile "${name}" already exists.`);
+    process.exit(1);
+  }
+
+  const conflict = findCaseConflict(name, config.profiles);
+  if (conflict) {
+    error(
+      `Profile "${name}" conflicts with existing profile "${conflict}". ` +
+        `Names must be unique case-insensitively to avoid collisions on macOS/Windows filesystems.`
+    );
     process.exit(1);
   }
 
@@ -286,6 +311,15 @@ export async function handleImport(
   if (config.profiles[profileName] && !opts.force) {
     error(
       `Profile "${profileName}" already exists. Use --force to overwrite.`
+    );
+    process.exit(1);
+  }
+
+  const conflict = findCaseConflict(profileName, config.profiles);
+  if (conflict && conflict !== profileName) {
+    error(
+      `Profile "${profileName}" conflicts with existing profile "${conflict}". ` +
+        `Names must be unique case-insensitively to avoid collisions on macOS/Windows filesystems.`
     );
     process.exit(1);
   }

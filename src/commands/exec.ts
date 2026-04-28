@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { loadConfig } from "../config.js";
 import { buildProfileEnv } from "../auth.js";
 import { error } from "../display.js";
@@ -54,12 +54,13 @@ export async function handleExec(
   }
 
   const profileEnv = await buildProfileEnv(profile, profileName);
-  const cmd = passthrough.join(" ");
+  const [command, ...args] = passthrough;
 
-  const child = spawn(cmd, {
+  // cross-spawn passes args verbatim on POSIX (no shell re-parsing) and
+  // resolves .cmd/.bat shims correctly on Windows.
+  const child = spawn(command, args, {
     stdio: "inherit",
     env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
-    shell: true,
   });
 
   child.on("error", (err) => {

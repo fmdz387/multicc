@@ -1,6 +1,6 @@
 {
   "name": "multicc",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "type": "module",
   "description": "Fast, cross-platform multi-account manager for Claude Code",
   "main": "./dist/index.js",
@@ -55,16 +55,18 @@
   "packageManager": "pnpm@10.29.3",
   "dependencies": {
     "commander": "^13",
+    "cross-spawn": "^7.0.6",
     "picocolors": "^1"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/node": "^22",
     "tsup": "^8",
     "tsx": "^4",
     "typescript": "^5.7"
   },
   "optionalDependencies": {
-    "@napi-rs/keyring": "^1",
-    "@inquirer/prompts": "^7"
+    "@inquirer/prompts": "^7",
+    "@napi-rs/keyring": "^1"
   }
 }

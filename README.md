@@ -27,10 +27,13 @@ npm install -g multicc
 ### Requirements
 
 - **Node.js 18+**
-- **Build tools** for native keyring module (optional):
+- **Native keyring** (`@napi-rs/keyring`) ships precompiled binaries for the common targets — Apple Silicon and Intel macOS, Windows x64/arm64, Linux x64/arm64 (glibc & musl). No build step is required on a normal install.
+- **Build tools** are only needed if a prebuilt binary isn't available for your platform (rare):
   - **Windows**: Visual C++ Build Tools
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
   - **Linux**: `build-essential` and `libsecret-1-dev`
+
+> **macOS note:** The first time `multicc set-key` stores an API key, macOS will show a Keychain prompt asking whether `node` may access the keyring. Click **Always Allow** to avoid being asked again. If you decline, the API key falls back to a `chmod 600` file at `~/.multicc/profiles/<name>/.api-key`.
 
 ## Quick Start
 

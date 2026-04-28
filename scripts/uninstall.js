@@ -28,6 +28,21 @@ const isLinux = platform() === 'linux';
 
 const forceMode = process.argv.includes('--force') || process.argv.includes('-f');
 
+function readProfileNames() {
+  const configPath = join(homedir(), CONFIG_DIR_NAME, 'config.json');
+  if (!existsSync(configPath)) return [];
+  try {
+    const raw = readFileSync(configPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.profiles === 'object' && parsed.profiles !== null) {
+      return Object.keys(parsed.profiles);
+    }
+  } catch {
+    // Corrupted config -- fall through to fallback cleanup.
+  }
+  return [];
+}
+
 function log(message, type = 'info') {
   const colors = {
     info: '\x1b[36m',
@@ -66,27 +81,75 @@ async function confirm(question) {
 async function removeKeyringEntries() {
   log('Removing API keys from system keyring...');
 
-  try {
-    try {
-      const { Entry } = await import('@napi-rs/keyring');
-      // Multicc stores keys per profile, try to clear the service
-      const entry = new Entry(KEYRING_SERVICE, 'default');
-      entry.deleteCredential();
-      log('Keyring entries removed (via @napi-rs/keyring)', 'success');
-      return true;
-    } catch {
-      // Fall through to platform-specific methods
-    }
+  const profiles = readProfileNames();
 
+  // Preferred path: use the same @napi-rs/keyring binding the CLI uses.
+  // Iterate over every profile so we delete each per-account entry.
+  let napiOk = false;
+  let napiCleared = 0;
+  try {
+    const { Entry } = await import('@napi-rs/keyring');
+    napiOk = true;
+    for (const name of profiles) {
+      try {
+        const entry = new Entry(KEYRING_SERVICE, name);
+        entry.deletePassword();
+        napiCleared++;
+      } catch {
+        // Entry may not exist -- ignore.
+      }
+    }
+  } catch {
+    // Module not installed -- fall through to native CLI tools.
+  }
+
+  if (napiOk) {
+    if (napiCleared > 0) {
+      log(`Removed ${napiCleared} keyring entr${napiCleared === 1 ? 'y' : 'ies'} via @napi-rs/keyring`, 'success');
+    } else {
+      log('No keyring entries found for known profiles', 'info');
+    }
+    return true;
+  }
+
+  // Fallback: platform-specific CLI. Iterate per profile when we know them;
+  // otherwise do a best-effort sweep of the service itself.
+  try {
     if (isWindows) {
-      spawnSync('cmdkey', ['/delete:multicc'], { encoding: 'utf-8', shell: true });
+      // cmdkey targets are stored as "<service>:<account>" by some bindings.
+      // Try per-profile first, then a service-wide cleanup as a safety net.
+      for (const name of profiles) {
+        spawnSync('cmdkey', [`/delete:${KEYRING_SERVICE}:${name}`], { encoding: 'utf-8' });
+      }
+      spawnSync('cmdkey', [`/delete:${KEYRING_SERVICE}`], { encoding: 'utf-8' });
     } else if (isMac) {
-      spawnSync('security', ['delete-generic-password', '-s', KEYRING_SERVICE], { encoding: 'utf-8' });
+      // macOS Keychain: -s scopes to service, -a scopes to account.
+      // Loop until no entry remains for each (service, account) pair.
+      for (const name of profiles) {
+        for (let i = 0; i < 10; i++) {
+          const r = spawnSync(
+            'security',
+            ['delete-generic-password', '-s', KEYRING_SERVICE, '-a', name],
+            { encoding: 'utf-8' }
+          );
+          if (r.status !== 0) break;
+        }
+      }
+      // Best-effort sweep of any remaining entries with our service name.
+      for (let i = 0; i < 10; i++) {
+        const r = spawnSync(
+          'security',
+          ['delete-generic-password', '-s', KEYRING_SERVICE],
+          { encoding: 'utf-8' }
+        );
+        if (r.status !== 0) break;
+      }
     } else if (isLinux) {
+      // libsecret: clear all entries with our service attribute.
       spawnSync('secret-tool', ['clear', 'service', KEYRING_SERVICE], { encoding: 'utf-8' });
     }
 
-    log('No keyring entries found (may not have been stored there)', 'warn');
+    log('Keyring cleanup attempted via native CLI (results vary by platform)', 'info');
     return true;
   } catch (error) {
     log(`Could not remove keyring entries: ${error.message}`, 'warn');

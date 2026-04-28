@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import spawn from "cross-spawn";
 import { loadConfig } from "../config.js";
 import { buildProfileEnv } from "../auth.js";
 import { error, info } from "../display.js";
@@ -44,11 +44,12 @@ export async function handleLaunch(
 
   info(`Launching claude with profile: ${profileName}`);
 
-  const cmd = ["claude", ...passthrough].join(" ");
-  const child = spawn(cmd, {
+  // cross-spawn passes args verbatim on POSIX (no shell re-parsing) and
+  // resolves .cmd/.bat shims correctly on Windows. This avoids both DEP0190
+  // and the quoting hazard of shell:true + joined strings.
+  const child = spawn("claude", passthrough, {
     stdio: "inherit",
     env: { ...process.env, ...profileEnv } as NodeJS.ProcessEnv,
-    shell: true,
   });
 
   child.on("error", (err) => {

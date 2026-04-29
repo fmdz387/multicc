@@ -158,6 +158,23 @@ const CLAUDE_AUTH_ENV_VARS = [
   "ANTHROPIC_FOUNDRY_RESOURCE",
 ] as const;
 
+// Tmp-dir env vars. Some upstream tools (notably Claude Code CLI 2.1.x)
+// can leak Windows-shaped paths like "C:\tmp\claude-cli-tmp" into the env
+// even on macOS/Linux. Forwarding such a value to a child causes Node's
+// os.tmpdir() to return a non-absolute string, which fs.* then resolves
+// against cwd — creating a literal "C:\tmp\..." directory inside the project.
+const TMP_ENV_VARS = [
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "CLAUDE_CODE_TMPDIR",
+  "CLAUDE_TMPDIR",
+] as const;
+
+// Matches a Windows-style absolute path (drive letter) or any path containing
+// a backslash separator. Either is invalid as a tmp dir on POSIX.
+const WINDOWS_PATH_RE = /^[A-Za-z]:[\\/]|\\/;
+
 export async function buildProfileEnv(
   profile: Profile,
   profileName: string
@@ -170,6 +187,19 @@ export async function buildProfileEnv(
   // from a different profile don't leak into the child process.
   for (const key of CLAUDE_AUTH_ENV_VARS) {
     env[key] = undefined;
+  }
+
+  // On non-Windows hosts, strip any tmp-dir env var whose value is a
+  // Windows-shaped path. Letting the child inherit it would cause it to
+  // create the path literally inside cwd. Unsetting forces the child to
+  // fall back to the platform default (/tmp on macOS/Linux).
+  if (process.platform !== "win32") {
+    for (const key of TMP_ENV_VARS) {
+      const value = process.env[key];
+      if (value && WINDOWS_PATH_RE.test(value)) {
+        env[key] = undefined;
+      }
+    }
   }
 
   switch (profile.authType) {
